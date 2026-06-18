@@ -4,7 +4,7 @@ def clear_screen():
     # 清屏nt为win系统的‘cls’， 其他系统为‘clear’
     os.system("cls" if os.name == 'nt' else 'clear')
 
-
+# 菜单界面
 def menu():
     clear_screen()
     print("""

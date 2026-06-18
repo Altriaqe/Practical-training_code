@@ -1,4 +1,4 @@
-{"id": "sx002", "name": "刘青青", "english": 93, "python": 97, "c": 84}
+{"id": "sx002", "name": "刘清", "english": 100, "python": 100, "c": 100}
 {"id": "sx004", "name": "李华", "english": 95, "python": 93, "c": 82}
 {"id": "sx005", "name": "张武", "english": 91, "python": 94, "c": 82}
 {"id": "sx006", "name": "李华", "english": 95, "python": 93, "c": 82}

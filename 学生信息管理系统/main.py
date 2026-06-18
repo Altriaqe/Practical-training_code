@@ -1,8 +1,9 @@
+# 引入封装好的菜单和组件模块
 from module.menu import menu
 from module.component import Component
 from module.component import pause
-import time
 
+# 主函数，程序入口
 def main():
     while True:
         menu()
@@ -27,6 +28,7 @@ def main():
         else:
             print("输入错误，请重新输入！")
             pause()
-            
+
+
 if __name__ == '__main__':
     main()

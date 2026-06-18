@@ -20,6 +20,7 @@ def save_students(students):
 def pause():
     input("按任意键继续...")
 
+# 获取成绩总分
 def get_total_score(student):
     return student['english'] + student['python'] + student['c']
 
@@ -45,18 +46,15 @@ def input_score(prompt):
             print("成绩必须在0到100之间，请重新输入！")
         except ValueError:
             print("输入无效，请输入一个数字！")
+
+# 定义一个Component类，包含学生信息的属性和相关方法
 class Component:
-    def __init__(self, id, name, english, python, c):
-        self.id = id
-        self.name = name
-        self.english = english
-        self.python = python
-        self.c = c
-
-
     def instert_student():
-        global input_score
         students = read_students() 
+        if not students:
+            print("没有学生信息，请先添加学生！")
+            pause()
+            return
         while True:
             print("===============输入学生信息================")
             sid = input("请输入学生ID：").strip()
@@ -70,6 +68,7 @@ class Component:
             english = input_score("请输入英语成绩：")
             python = input_score("请输入Python成绩：")
             c = input_score("请输入C语言成绩：")
+            # 将输入信息整合为一个学生字典，并添加到学生列表中，最后保存到文件
             student = {
                 'id': sid,
                 'name': name,
@@ -95,6 +94,7 @@ class Component:
         while True:
             print("===============查询学生信息================")
             mode = input("按ID查询请输入1，按姓名查询请输入2：").strip()
+            # 建立一个列表，确保有重名的学生也可以被查询到，避免使用next()函数只返回第一个匹配的学生信息
             results = []
             if mode == '1':
                 sid = input("请输入学生ID：").strip()
@@ -135,6 +135,12 @@ class Component:
             这段代码会遍历students列表，找到id为'001'的学生信息，并将其赋值给student变量。
             如果找到了，student将是{'id': '001', 'name': '张三'}；如果没有找到，student将是None。
             enumerate()函数用于将一个可迭代对象转换为一个索引序列，同时列出数据和数据下标，常用于在循环中获取元素的索引。
+            比如：students = [{'id': '001', 'name': '张三'}, {'id': '002', 'name': '李四'}]
+            sid = '001'
+                for index, student in enumerate(students):
+                    if student['id'] == sid:
+                        print(f"学生信息索引：{index}, 学生信息：{student}")
+                        break
             """
             # student = next((i for i,j in enumerate(student) if j['id'] == sid),none) 
             # 如果需要获取索引，可以使用enumerate()函数来实现,通过索引来删除学生信息
@@ -142,6 +148,7 @@ class Component:
             if student:
                 # del students[student] # 通过索引删除学生信息
                 students.remove(student) # remove()方法用于从列表中删除指定的元素，如果元素不存在则会引发ValueError异常
+                # 若要用坐标students.remove(index(student))，则需要先获取索引位置，可以使用enumerate()函数来代替直接使用del
                 save_students(students)
                 print("学生信息删除成功！")
                 print("当前学生信息列表：")
@@ -164,12 +171,15 @@ class Component:
             sid = input("请输入学生ID：").strip()
             student = next((s for s in students if s['id'] == sid), None)
             # or 的短路特性，如果用户输入了新的姓名，就使用新的姓名，否则保持原来的姓名不变
+            """
+            比如：原本名字为李华、输入李华保持不变，输入新的名字张华则修改为张华
+            """
             if student:
                 name = input(f"请输入学生姓名（当前：{student['name']}）：").strip() or student['name']
                 english = input_score(f"请输入英语成绩（当前：{student['english']}）：") or student['english']
                 python = input_score(f"请输入Python成绩（当前：{student['python']}）：") or student['python']
                 c = input_score(f"请输入C语言成绩（当前：{student['c']}）：") or student['c']
-                student['name'] = name or student['name']
+                student['name'] = name 
                 student['english'] = english
                 student['python'] = python
                 student['c'] = c

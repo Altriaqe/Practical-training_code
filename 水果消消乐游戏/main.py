@@ -22,7 +22,7 @@ STATUS_SCORE = 2
 
 # 具体加载一个图片或字体
 def load_image(path):
-    return pygame.image.load(path).convert().alpha()
+    return pygame.image.load(path).convert().alpha() # 加载图片并转换为带有alpha通道的格式，支持透明背景
 
 
 # 加载图片到内存

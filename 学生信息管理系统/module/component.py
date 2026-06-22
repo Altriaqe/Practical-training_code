@@ -58,6 +58,7 @@ class Component:
         while True:
             print("===============输入学生信息================")
             sid = input("请输入学生ID：").strip()
+            # any函数用于判断给定的可迭代对象中是否有满足条件的元素，如果有则返回True，否则返回False
             if any(student['id'] == sid for student in students):
                 print("学生ID已存在，请重新输入！")
                 continue

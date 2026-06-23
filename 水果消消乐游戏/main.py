@@ -56,14 +56,58 @@ def load_all_assets():
 
 class Manager:
     def __init__(self, screen):
-        self.screen = screen
+        self.screen = screen  # 游戏窗口对象
         self.state = STATUS_START # 游戏状态：start, playing, game_over
+        self.grid = [[-1] * WIDTH for _ in range(HEIGHT)] # 游戏矩阵，存储每个格子中的水果类型，-1表示空格
+
+        self.score = 0 # 初始分数
+        self.destory_counts = [0] * 6 # 每种水果的消除数量
+        self.score_list = [] # 存储每次消除的分数，用于显示分数动画
+        self.reset_layout = True # 允许随机生成self.grid的标志位
+
         self.last_sel = [-1, -1] # 上一次选中的水果位置
         self.cur_sel = [-1, -1] # 当前选中的水果位置
+        self.exchange_status = -1 # 默认不可交换, 1表示可以交换，0表示交换完成
         
+        self.start_time = 0 # 游戏开始时间
+        self.runtime = 0 # 游戏运行时间
+        self.time_is_over = False # 游戏时间是否结束
+        self.death_sign = False # 游戏出现死局的标志位
+        self.animating = False # 游戏正在播放消除动画的标志位
+        self._score_recoreded = True # 游戏是否需要记录分数的标志， 下划线表示私有变量，表示是类内部使用的变量，不应该被外部访问
+
+        self.feedback_img = None # 游戏结束时的反馈图片
+        self.feedback_timer = 0 # 游戏结束时的反馈图片显示时间
+
+        self.end_img = None # 游戏结束时的图片
+        self.end_timer = 0 # 游戏结束时的图片显示时间
+
+
+        # 预计计算各个水果框所在位置
+        self._cell_coored = {}
+        for row in range(HEIGHT):
+            for col in range(WIDTH):
+                self._cell_coored[(row, col)] = \
+                (MATRIX_TOPLEFT[0] + col * CELL_SIZE, MATRIX_TOPLEFT[1] + row * CELL_SIZE)
+
     def reset_game(self):
         # 初始化游戏数据
-        pass
+        self.reset_layout = True
+        self.score = 0
+        self.destory_counts = [0] * 6
+        self.runtime = 0
+        self.start_time = pygame.time.get_ticks()
+        self.death_sign = False
+        self.animating = False
+        self.cur_sel = [-1, -1]
+        self.last_sel = [-1, -1]
+        self.exchange_status = -1
+        self._score_recoreded = True
+        self.feedback_img = None
+        self.feedback_timer = 0
+        self.end_img = None
+        self.end_timer = 0
+
     def go_to_score(self):
         # 计算分数并显示分数界面
         pass
@@ -71,6 +115,8 @@ class Manager:
         # 将鼠标点击的坐标转换为矩阵中的行列
         pass
     def handle_mouse(self, mouse_pos):
+        if self.animating or self.end_game() > 0:  # 出现死局或正在播放消除动画时，不处理鼠标点击事件
+            return
         x, y = mouse_pos
         if self.state == STATUS_START:
             if 300 < x < 600 and 250 < y < 370:
@@ -86,7 +132,19 @@ class Manager:
                     row, col = self.xy_to_row_col(x, y)
                     self.last_sel = self.cur_sel
                     self.cur_sel = [row, col]
-        pass
+
+                    if self.last_sel != [-1, -1]:
+                        if abs (row - self.last_sel[0]) + abs(col - self.last_sel[1]) == 1:
+                            self.exchange_status = 1
+
+            elif self.state == STATUS_PLAYING:
+                if 620 < x < 820 and 160 < y < 220:
+                    self.state = STATUS_PLAYING
+                    self.reset_game()
+                if 620 < x < 820 and 400 < y < 220:
+                    sys.exit()
+
+
 
     def update(self):
         # 根据游戏状态更新游戏逻辑
@@ -112,12 +170,12 @@ def main():
             if event.type == KEYDOWN and event.key == K_ESCAPE:
                 pygame.quit()
             if event.type == MOUSEBUTTONDOWN:
-                game.handle_mouse(event.pos)
+                game.handle_mouse(event.pos) # 对用户点击
 
-        game.update()
-        game.draw()
-        pygame.display.flip()
-        clock.tick(FPS)
+        game.update() # 更新游戏逻辑
+        game.draw()  # 绘制游戏界面
+        pygame.display.flip()  # 更新屏幕显示
+        clock.tick(FPS)  # 控制游戏帧率
 
 if __name__ == "__main__":
     main()

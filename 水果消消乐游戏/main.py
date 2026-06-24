@@ -1,4 +1,5 @@
 import sys
+from networkx import has_path
 import pygame
 from pygame.locals import *
 import random 
@@ -11,7 +12,7 @@ CELL_SIZE = 50              # 每个格子的大小
 WIDTH, HEIGHT = 9, 9        # 游戏矩阵的行数和列数 
 MATRIX_TOPLEFT = (250, 100)     # 游戏矩阵在窗口中的左上角坐标
 FPS = 60
-GAME_TIME = 3 * 60 * 100 # 游戏时间，单位为纳秒
+GAME_TIME = 3 * 60 * 1000 # 游戏时间，单位为毫秒
 SCORE_PER_FRUIT = [1,2,1,1,2,1] # 每种水果的分数
 
 STATUS_START = 0
@@ -22,7 +23,7 @@ STATUS_SCORE = 2
 
 # 具体加载一个图片或字体
 def load_image(path):
-    return pygame.image.load(path).convert().alpha()  # 加载图片并转换为带有alpha通道的格式，支持透明背景
+    return pygame.image.load(path).convert_alpha()  # 加载图片并转换为带有alpha通道的格式，支持透明背景
 
 
 # 加载图片到内存
@@ -30,25 +31,25 @@ ASSETS = {}
 def load_all_assets():
     ASSETS["bg_tree"] = load_image("static/img/tree.png")
     ASSETS["bg_score"] = load_image("static/img/bs.png")
-    ASSETS["bg_playing"] = load_image("static/img/bp.png")
-    ASSETS["game_start_button"] = load_image("static/img/game_start_butten.png")
+    ASSETS["bg_playing"] = load_image("static/img/bg.png")
+    ASSETS["game_start_button"] = load_image("static/img/game_start_button.png")
     ASSETS["exit"] = load_image("static/img/exit.png")
     ASSETS["frame"] = load_image("static/img/frame.png")
     ASSETS["board_score"] = load_image("static/img/task.png")
     ASSETS["brick"] = load_image("static/img/brick.png")
-    ASSETS["no_fruit"] = load_image("static/img/nonaeanimal.png")
+    ASSETS["no_fruit"] = load_image("static/img/noneanimal.png")
     ASSETS["time_is_over"] = load_image("static/img/time_is_over.png")
     # 创建值为列表的字典，列表中存储每种水果的图片
-    ASSETS["digit"] = [load_image(f"static/img/digit_{i}.png") for i in range(10)]
-    ASSETS["fruit"] = [load_image(f"static/img/fruit_{name}.png") for name in 
-                       ('lemon', 'watermelon', 'grapefruit', 'kiwfruit', 'nettedmelon', 'avocado')]   
+    ASSETS["digit"] = [load_image(f"static/img/{i}.png") for i in range(10)]
+    ASSETS["fruit"] = [load_image(f"static/img/{name}.png") for name in 
+                       ('lemon', 'watermelon', 'grapefruit', 'kiwifruit', 'nettedmelon', 'avocado')]   
     # 加载bling8.png图片，作为消除水果时的特效图片
     ASSETS["bling8"] = load_image("static/img/bling8.png")
 
     # 加载字体，如果加载失败则使用默认字体
     try:
-        ASSETS["font_large"] = pygame.font.Font("static/font/zhengqingke", 43)
-        ASSETS["font_small"] = pygame.font.Font("static/font/zhengqingke", 35)
+        ASSETS["font_large"] = pygame.font.Font("static/font/zhengqingke.ttf", 43)
+        ASSETS["font_small"] = pygame.font.Font("static/font/zhengqingke.ttf", 35)
     except:
         ASSETS["font_large"] = pygame.font.Font(None, 43)
         ASSETS["font_small"] = pygame.font.Font(None, 35)
@@ -84,10 +85,10 @@ class Manager:
 
 
         # 预计计算各个水果框所在位置
-        self._cell_coored = {}
+        self._cell_coords = {}
         for row in range(HEIGHT):
             for col in range(WIDTH):
-                self._cell_coored[(row, col)] = \
+                self._cell_coords[(row, col)] = \
                 (MATRIX_TOPLEFT[0] + col * CELL_SIZE, MATRIX_TOPLEFT[1] + row * CELL_SIZE)
 
     def reset_game(self):
@@ -120,40 +121,43 @@ class Manager:
 
     def xy_to_row_col(self, x, y):
         # 将鼠标点击的坐标转换为矩阵中的行列
+        # 用鼠标点击的坐标减去矩阵左上角的坐标，再除以每个格子的大小，得到行列索引
         row = (y - MATRIX_TOPLEFT[1]) // CELL_SIZE
         col = (x - MATRIX_TOPLEFT[0]) // CELL_SIZE
         return row, col
 
 
     def handle_mouse(self, mouse_pos):
-        if self.animating or self.end_game() > 0:  # 出现死局或正在播放消除动画时，不处理鼠标点击事件
+        if self.animating or self.end_timer > 0:  # 出现死局或正在播放消除动画时，不处理鼠标点击事件
             return
+        
         x, y = mouse_pos
         if self.state == STATUS_START:
             if 300 < x < 600 and 250 < y < 370:
                 self.state = STATUS_PLAYING
                 self.reset_game()
-            elif self.state == STATUS_SCORE:
-                if 20 < x < 83 and 530 < y < 590:
-                   self.go_to_score()
-                   return
-                mx1, my1 = MATRIX_TOPLEFT
-                mx2, my2 = mx1 + CELL_SIZE * WIDTH, my1 + CELL_SIZE * HEIGHT
-                if mx1 < x < mx2 and my1 < y < my2:
-                    row, col = self.xy_to_row_col(x, y)
-                    self.last_sel = self.cur_sel
-                    self.cur_sel = [row, col]
+        elif self.state == STATUS_SCORE:
+            if 20 < x < 83 and 530 < y < 590:
+                self.go_to_score()
+                return
+            
+            mx1, my1 = MATRIX_TOPLEFT
+            mx2, my2 = mx1 + CELL_SIZE * WIDTH, my1 + CELL_SIZE * HEIGHT
+            if mx1 < x < mx2 and my1 < y < my2:
+                row, col = self.xy_to_row_col(x, y)
+                self.last_sel = self.cur_sel
+                self.cur_sel = [row, col]
 
-                    if self.last_sel != [-1, -1]:
-                        if abs (row - self.last_sel[0]) + abs(col - self.last_sel[1]) == 1:
-                            self.exchange_status = 1
+                if self.last_sel != [-1, -1]:
+                    if abs (row - self.last_sel[0]) + abs(col - self.last_sel[1]) == 1:
+                        self.exchange_status = 1
 
-            elif self.state == STATUS_PLAYING:
-                if 620 < x < 820 and 160 < y < 220:
-                    self.state = STATUS_PLAYING
-                    self.reset_game()
-                if 620 < x < 820 and 400 < y < 220:
-                    sys.exit()
+        elif self.state == STATUS_PLAYING:
+            if 620 < x < 820 and 160 < y < 220:
+                self.state = STATUS_PLAYING
+                self.reset_game()
+            if 620 < x < 820 and 400 < y < 220:
+                sys.exit()
 
 
     def reset_grid(self):
@@ -162,13 +166,156 @@ class Manager:
         for i in range(HEIGHT):
             for j in range(WIDTH):
                 self.grid[i][j] = random.randint(0, 5)  # 随机生成水果类型，0-5表示6种水果
-        self.elminate_all(animate=False)  # 消除所有可以消除的水果，确保初始布局没有可消除的水果
+        self.eliminate_all(animate=True)  # 消除所有可以消除的水果，确保初始布局没有可消除的水果
         self.reset_layout = False  # 重置标志位，避免重复生成
 
 
+
+    def play_clear_animation(self, to_clear):
+        '''
+        播放消除动画，to_clear为需要消除的水果位置列表
+        '''
+        pass
+    
+    def drop_fruits(self, animate=True):
+        '''
+        下落水果，填补空缺，animate为是否播放下落动画
+        '''
+        pass
+
+    def show_feedback(self, delta):
+        '''
+        显示分数增加的动画，delta为增加的分数
+        '''
+        pass
+
+    def check_horizontal(self, row, col):
+        '''
+        检测当前水果横向是否有三连，返回True或False
+        '''
+        if col > WIDTH - 3:
+            return False
+        val = self.grid[row][col]
+        return not val in (-1, -2) and self.grid[row][col + 1] == val and self.grid[row][col + 2]
+            
+        
+    def check_vertical(self, row, col):
+        '''
+        检测当前水果纵向是否有三连，返回True或False
+        '''
+        if row > HEIGHT - 3:
+            return False
+        val = self.grid[row][col]
+        return val in (-1, -2) and self.grid[row + 1][col] == val and self.grid[row + 2][col]
+    
+    def count_horizontal(self, row, col):
+        '''
+        计算当前水果横向有多少个相同的水果
+        '''
+        val, cnt = self.grid[row][col], 1
+        for j in range(col + 1, WIDTH):
+            if self.grid[row][j] == val:
+                cnt += 1
+            else:
+                break
+            
+    def eliminate_all(self, animate=True):
+        # animate=True 默认消除时要显示消除动画
+        """
+        ### 遍历矩阵，把所有能消除的水果全部标记、消除、生成新的水果、算分、显示激励图片
+        主要逻辑：
+        先对分数进行copy、标记一个changed变量为True，表示有水果被消除
+        然后进入while循环，循环条件为changed为True，表示还有水果可以消除
+        在循环之中遍历矩阵、去掉空位和已消除位置
+        横向遍历，若检测函数check_horizontal()返回True，
+        则调用count_horizontal()函数计算横向有多少个相同的水果，并
+        将这些水果的位置加入to_clear列表中，同时更新destory_counts字典，记录每种水果的消除数量
+        纵向遍历，若检测函数check_vertical()返回True，
+        则调用count_vertical()函数计算纵向有多少个相同的水果，
+        并将这些水果的位置加入to_clear列表中，同时更新destory_counts字典，记录每种水果的消除数量
+        遍历完矩阵后，若to_clear列表不为空，则表示有水果需要消除
+        将to_clear列表中的水果位置在矩阵中标记为已消除状态(-2),
+        最后如果检测到有水果消除，则调用play_clear_animation()函数播放消除动画，
+        然后调用drop_fruits()函数让水果下落，填补空缺
+        并且有动画播放、则调用show_feedback()函数显示分数增加的动画
+        """
+        prev_score = self.score
+        changed = True
+        while changed:
+            changed = False
+            to_clear = []  # 存储需要消除的水果位置
+            
+            for row in range(HEIGHT):
+                for col in range(WIDTH):
+                    val = self.grid[row][col]
+                    if val in (-1, -2):  # 原始状态或已经消除的水果不参与检测
+                        continue
+                    if self.check_horizontal(row, col):
+                        cnt = self.count_horizontal(row, col) # 数横向一共有几个相同的水果
+                        for k in range(cnt):
+                            to_clear.append((row, col + k, val))  # 将需要消除的水果位置加入列表
+                        self.destory_counts[val] += cnt  # 更新消除数量
+                        changed = True
+                    if self.check_vertical(row, col):
+                        for k in range(self.count_vertical(row, col)):
+                            to_clear.append((row + k, col, val))  # 将需要消除的水果位置加入列表
+                        self.destory_counts[val] += self.count_vertical(row, col)  # 更新消除数量
+                        changed = True
+
+                for row, col, _ in to_clear:
+                    self.grid[row][col] = -2  # 标记为已消除状态
+
+                if changed:
+                    if animate:
+                        self.play_clear_animation(to_clear)  # 播放消除动画
+                    self.drop_fruits(animate=animate)  # 下落水果，填补空缺
+            self.calc_score()  # 计算分数
+            if animate:
+                dalta = self.score - prev_score
+                self.show_feedback(dalta)  # 显示分数增加的动画
+
+    def has_match(self):
+        # 检测当前矩阵中是否有可以消除的水果，返回True或False
+        """
+        检测游戏矩阵中是否有三连，允许横竖
+        """
+        for row in range(HEIGHT):
+            for col in range(WIDTH):
+                val = self.grid[row][col]
+                if val == (-1, -2): # 原始状态或已经消除的水果不参与检测
+                    continue
+                # 检测横向三连
+                """
+                具体逻辑为：
+                1. 检查当前水果的列索引是否小于等于WIDTH - 3，确保有足够的空间检查右边两个水果
+                2. 检查当前水果的右边两个水果是否与当前水果类型，通过右侧两个水果的列索引分别为col + 1和col + 2，
+                判断它们的类型是否与当前水果类型相同
+                3. 如果满足以上两个条件，则说明当前水果与右边两个水果形成
+                """
+                self.check_horizontal(row, col)
+                # 检测纵向三连
+                self.check_vertical(row, col)
+            return False  # 没有找到可以消除的水果，返回False
+        
+    def swap_fruits(self, p1, p2):
+        # 交换水果位置
+        r1, c1 = p1
+        r2, c2 = p2
+        self.grid[r1][c1], self.grid[r2][c2] = self.grid[r2][c2], self.grid[r1][c1]
+
     def process_swap(self):
         # 处理水果交换逻辑, 判断能不能消除，记录消除哪些水果，分别积分是多少，还有没有连锁消除，积分
-        pass
+        # 一次完整的交换：交换、检测、消除、还原
+        p1, p2 = self.last_sel, self.cur_sel
+        self.weap_fruits(p1, p2)  # 交换两个水果
+
+        if not self.has_match():
+            self.weap_fruits(p1, p2)  # 如果没有消除，交换回来
+        else:
+            self.eliminate_all(animate=True)  # 如果有消除，播放消除动画 eliminate_all()函数会处理消除逻辑，包括计算分数、更新游戏状态等,这个函数还未实现
+        
+        self.last_sel = self.cur_sel = [-1, -1]  # 重置选中水果位置
+        self.exchange_status = -1  # 重置交换状态
 
     def is_dead_map(self):
         # 判断游戏是否出现死局，返回死局的数量
@@ -180,7 +327,7 @@ class Manager:
             self.end_img = ASSETS["time_is_over"]
         elif img == 'dead':
             self.end_img = ASSETS["no_fruit"]
-        self.end_timer = 90  # 显示图片的时间，单位为帧数 1s为 60帧，90帧约等于1.5秒
+        self.end_timer = 90  # 显示图片的时间，单位为帧数 1s为 60帧，90帧约等于1.5秒 一帧大概为0.167s
 
     def update(self):
         # 根据游戏状态更新游戏逻辑
@@ -197,14 +344,23 @@ class Manager:
         if self.feedback_timer >= 0:
             self.feedback_timer -= 1
 
-        # 时间到
-        self.runtime = pygame.time.get_ticks() - self.start_time
-        if self.runtime >= GAME_TIME and not self.time_is_over:
+        """
+        # 游戏结束的处理逻辑
+        主要逻辑线路
+        self.time_is_over,self.end_timer(), self.death_sign() 这几个函数分别对应三个游戏结束的标志位
+        在这三个标志位中，只有一个会被触发，触发后会显示对应的图片，调用show_end_image函数展示图片并且设置end_timer为90帧，表示图片显示的时间
+        然后在update()函数中，每帧都会检查end_timer是否大于0，如果大于0，则end_timer减1，当end_timer减到0时，表示图片显示完毕，此时会调用go_to_score()函数，进入分数界面
+        这样就实现了游戏结束后，先显示对应的图片，然后再进入分数界面的逻辑。
+        """
+
+        # 时间到 
+        self.runing_time = pygame.time.get_ticks() - self.start_time  # 计算游戏运行时间使用pygame中的get_ticks()函数获取当前时间，减去游戏开始时间，得到游戏运行时间
+        if self.runing_time >= GAME_TIME and not self.time_is_over:
             self.time_is_over = True
             self.show_end_image('time_up') # 显示时间到的图片
 
         #死图
-        if self.end_game() > 0 and not self.death_sign and self.end_timer == 0:
+        if not self.time_is_over and not self.death_sign and self.end_timer == 0:
             self.death_sign = self.is_dead_map()
             if self.death_sign:
                 self.show_end_image('dead') # 显示死图的图片

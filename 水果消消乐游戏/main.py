@@ -105,7 +105,7 @@ class Manager:
         self.cur_sel = [-1, -1]
         self.last_sel = [-1, -1]
         self.exchange_status = -1
-        self._score_recorded = True
+        self._score_recorded = False
         self.feedback_img = None
         self.feedback_timer = 0
         self.end_img = None
@@ -138,6 +138,13 @@ class Manager:
                 self.state = STATUS_PLAYING
                 self.reset_game()
         elif self.state == STATUS_SCORE:
+            if 620 < x < 820 and 160 < y < 220:
+                self.state = STATUS_PLAYING
+                self.reset_game()
+                return
+            if 620 < x < 820 and 400 < y < 460:
+                pygame.quit()
+                sys.exit()
             if 20 < x < 83 and 530 < y < 590:
                 self.go_to_score()
                 return
@@ -147,7 +154,8 @@ class Manager:
                 self.state = STATUS_PLAYING
                 self.reset_game()
             if 20 < x < 83 and 530 < y < 590:
-                sys.exit()
+                self.go_to_score()
+                return
 
             mx1, my1 = MATRIX_TOPLEFT
             mx2, my2 = mx1 + CELL_SIZE * WIDTH, my1 + CELL_SIZE * HEIGHT

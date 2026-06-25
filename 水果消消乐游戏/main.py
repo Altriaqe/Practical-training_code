@@ -146,7 +146,7 @@ class Manager:
             if 620 < x < 820 and 160 < y < 220:
                 self.state = STATUS_PLAYING
                 self.reset_game()
-            if 620 < x < 820 and 400 < y < 460:
+            if 20 < x < 83 and 530 < y < 590:
                 sys.exit()
 
             mx1, my1 = MATRIX_TOPLEFT
@@ -501,6 +501,12 @@ class Manager:
                 row, col = self.cur_sel
                 x, y = self._cell_coords[(row, col)]
                 self.screen.blit(ASSETS["frame"], (x, y)) # 绘制选中水果的边框
+
+            if self.feedback_img and self.feedback_timer > 0:
+                fw, fh = self.feedback_img.get_size()
+                fx = SCREEN_SIZE[0] // 2 - fw // 2
+                fy = MATRIX_TOPLEFT[1] - fh - 12
+                self.screen.blit(self.feedback_img, (fx, fy))
 
             if self.end_img and self.end_timer > 0:
                 w, h = self.end_img.get_size()

@@ -563,13 +563,13 @@ def main():
     game = Manager(screen)  # 创建游戏管理器对象，负责游戏逻辑和界面绘制
     # 事件驱动
     while True:
-        for event in pygame.event.get():
+        for event in pygame.event.get():  # 获取所有事件
             if event.type == QUIT:
                 pygame.quit()
-            if event.type == KEYDOWN and event.key == K_ESCAPE:
+            if event.type == KEYDOWN and event.key == K_ESCAPE: # 按下ESC键退出游戏
                 pygame.quit()
             if event.type == MOUSEBUTTONDOWN:
-                game.handle_mouse(event.pos) # 对用户点击
+                game.handle_mouse(event.pos) # 获取鼠标点击位置，处理游戏逻辑event.pos是一个元组，包含鼠标点击的x和y坐标、是pygame自带的一个事件类型，表示鼠标按下事件
 
         game.update() # 更新游戏逻辑
         game.draw()  # 绘制游戏界面

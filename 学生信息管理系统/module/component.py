@@ -7,7 +7,7 @@ def read_students():
         return []
     with open(filename, 'r', encoding='utf-8') as f:
         # json.loads()将字符串转换为Python对象，json.dumps()将Python对象转换为字符串
-        return [json.loads(line.strip()) for line in f if line.strip()]
+        return [json.loads(line.strip()) for line in f if line.strip()] # if line.strip()用于过滤掉空行，避免json.loads()解析空字符串时报错
         # 类型变化：字符串 -> Python对象（字典）
 
 def save_students(students):

@@ -3,6 +3,10 @@ import pygame
 from core.base import Base
 from core.entity import Font_Fact, Element
 from core.handler import Manager
+"""
+从 core.base 导入 Base 类
+从 core.entity 导入 Font_Fact 和 Element 类
+"""
 
 class Score_Manager(Base):
     """
@@ -10,7 +14,7 @@ class Score_Manager(Base):
     """
 
     def __init__(self):
-        super(Score_Manager, self).__init__()
+        super(Score_Manager, self).__init__() # super() 函数是用于调用父类(超类)的一个方法
 
     def choice_game_init(self):
         """ 游戏排行榜界面的初始化 """

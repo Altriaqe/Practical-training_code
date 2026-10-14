@@ -1,0 +1,18 @@
+flowchart LR
+    A[开始] --> B[1]
+    A[开始] --> p2
+    p2 --> C[2]
+    B --> D[3]
+    D --> F{判断条件}
+    F -- 条件成立 --> G[情况1]
+    F -- 条件不成立 --> H[情况2]
+    G --> I((end))
+    H --> I((end))
+    C --> I((end))
+
+subgraph p2 [子流程]
+    direction TD
+    FM1[情况1] --> FM2[情况2]
+end
+
+style I fill:#f9f,stroke:#333,stroke-width:4px

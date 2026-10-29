@@ -1,0 +1,37 @@
+flowchart TD
+    A([开始])
+    B[输入数字或运算符]
+    C{是否选择运算符?}
+    D[清空显示框]
+    E[将输入追加到表达式]
+    F{表达式是否有效?}
+    G[执行计算]
+    H{计算是否成功?}
+    I[显示计算结果]
+    J[显示错误信息]
+    K([结束])
+
+    A --> B
+    B --> C
+    C -- 是 --> E
+    C -- 否 --> D
+    D --> B
+    E --> F
+    F -- 是 --> G
+    F -- 否 --> B
+    G --> H
+    H -- 是 --> I
+    H -- 否 --> J
+    I --> K
+    J --> B
+
+    classDef start fill:#1f1f1f,stroke:#7aa2ff,stroke-width:2px,color:#ffffff
+    classDef process fill:#2a2a2a,stroke:#ff6fa6,stroke-width:2px,color:#ffffff
+    classDef decision fill:#2a2a2a,stroke:#7aa2ff,stroke-width:2px,color:#ffffff
+    classDef end fill:#1f1f1f,stroke:#4ade80,stroke-width:2px,color:#ffffff
+
+    class A start
+    class B,D,E,G,I,J process
+    class C,F,H decision
+    class K end
+

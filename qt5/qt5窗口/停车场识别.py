@@ -1,9 +1,14 @@
+import os
 import sys
 from datetime import datetime
 
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import *
+import cv2
+from paddleocr import PaddleOCR
+from ultralytics import YOLO
+
 
 class LoginWindow(QMainWindow):
     def __init__(self):
@@ -66,8 +71,109 @@ class LoginWindow(QMainWindow):
         else:
             QMessageBox.information(self, "成功", "登录成功")
             self.close()  # 关闭登录窗口
-            window = ParkingApp()  # 创建停车管理系统窗口
-            window.show()  # 显示停车管理系统窗口
+            self.window = ParkingApp()  # 创建停车管理系统窗口
+            self.window.show()  # 显示停车管理系统窗口
+
+class YOLOv8LicenseDetector:
+    """YOLOv8车牌检测与识别类"""
+    
+    def __init__(self, model_name='best.pt'):
+        print(f"正在加载YOLO模型: {model_name}")
+        self.model = YOLO(model_name)
+        print("YOLO模型加载成功！")
+        
+        # 初始化OCR模型
+        print("正在加载OCR模型...")
+        self.ocr = PaddleOCR(use_angle_cls=True, lang='ch', show_log=False)
+        print("OCR模型加载成功！")
+    
+    def detect_and_recognize(self, image_path, conf_threshold=0.3):
+        """
+        检测图片中的车牌并识别车牌号码
+        返回: [(车牌号码, 置信度, 剪切图片路径), ...]
+        """
+        # 读取图片
+        image = cv2.imread(image_path)
+        if image is None:
+            print(f"无法读取图片: {image_path}")
+            return []
+        
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image_height, image_width = image_rgb.shape[:2]
+        
+        # 进行推理
+        results = self.model(image_rgb, conf=conf_threshold)[0]
+        
+        # 获取检测结果
+        boxes = results.boxes
+        if boxes is None or len(boxes) == 0:
+            print("未检测到任何车牌")
+            return []
+        
+        # 创建临时保存目录
+        temp_dir = 'temp_cropped'
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir)
+        
+        recognized_plates = []
+        
+        for idx, box in enumerate(boxes):
+            # 获取边界框坐标
+            x1, y1, x2, y2 = box.xyxy[0].tolist()
+            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+            
+            # 确保坐标在图像范围内
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(image_width, x2), min(image_height, y2)
+            
+            # 获取置信度
+            confidence = float(box.conf[0])
+            
+            # 剪切车牌区域
+            plate_crop = image_rgb[y1:y2, x1:x2]
+            
+            if plate_crop.size == 0:
+                continue
+            
+            # 保存临时剪切图片
+            crop_filename = f"temp_plate_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{idx}.jpg"
+            crop_path = os.path.join(temp_dir, crop_filename)
+            from PIL import Image
+            Image.fromarray(plate_crop).save(crop_path)
+            
+            # OCR识别
+            try:
+                result = self.ocr.ocr(crop_path, cls=True)
+                if result and result[0]:
+                    for line in result[0]:
+                        text = line[1][0]
+                        ocr_confidence = line[1][1]
+                        # 过滤车牌格式（通常以中文省份简称开头）
+                        if len(text) >= 6:
+                            recognized_plates.append({
+                                'plate_number': text,
+                                'ocr_confidence': ocr_confidence,
+                                'detection_confidence': confidence,
+                                'crop_path': crop_path
+                            })
+                            print(f"识别到车牌: {text} (置信度: {ocr_confidence:.3f})")
+            except Exception as e:
+                print(f"OCR识别错误: {e}")
+                continue
+        
+        # 按置信度排序，返回最可能的车牌
+        if recognized_plates:
+            recognized_plates.sort(key=lambda x: x['ocr_confidence'], reverse=True)
+        
+        return recognized_plates
+    
+    def cleanup_temp_files(self):
+        """清理临时文件"""
+        temp_dir = 'temp_cropped'
+        if os.path.exists(temp_dir):
+            import shutil
+            shutil.rmtree(temp_dir)
+            print("已清理临时文件")
 
 class ParkingSystem:
     """系统逻辑"""
@@ -122,6 +228,7 @@ class ParkingApp(QMainWindow):
         super().__init__()
         self.current_plate = ""
         self.parking_system = ParkingSystem()
+        self.detector = None  # YOLO车牌检测器实例
         self.init_UI()
 
     def init_UI(self):
@@ -135,68 +242,30 @@ class ParkingApp(QMainWindow):
         left_panel = QVBoxLayout()
 
         # 车辆输入区域
-        input_Group = QGroupBox("车辆输入区域")
+        input_Group = QGroupBox("车牌识别")
         input_layout = QVBoxLayout()
 
-        #==========1、省份选择==============
-        province_layout = QHBoxLayout()
-        province_label = QLabel("省份:")
-        self.province_combo = QComboBox()
-        # 省份合集
-        provinces = ['京', '沪', '粤', '苏', '浙', '鲁', '晋', '冀', '豫', '云', 
-                    '辽', '黑', '湘', '皖', '闽', '赣', '贵', '琼', '川', '甘', 
-                    '陕', '吉', '蒙', '津', '渝', '澳', '台']
-        self.province_combo.addItems(provinces)
-        province_layout.addWidget(province_label)
-        province_layout.addWidget(self.province_combo)
-        input_layout.addLayout(province_layout)
+        #=============图片选择按钮==========
+        self.select_image_btn = QPushButton("选择车牌图片")
+        self.select_image_btn.setMinimumWidth(40)
+        self.select_image_btn.clicked.connect(self.select_image)
+        input_layout.addWidget(self.select_image_btn)
 
-        #===========2、字母选择==============
-        letter_layout = QHBoxLayout()
-        letter_label = QLabel("字母:")
-        self.letter_combo = QComboBox()
-        self.letter_combo.addItems([chr(ord('A') + i) for i in range(26)])
-        letter_layout.addWidget(letter_label)
-        letter_layout.addWidget(self.letter_combo)
-        input_layout.addLayout(letter_layout)
+        #============图片浏览============
+        self.image_label = QLabel('未选择图片\n请点击\"选择车牌图片\"按钮')
+        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setMinimumHeight(200)
+        self.image_label.setMinimumWidth(300)
+        self.image_label.setStyleSheet("border: 1px solid black;")
+        self.image_label.setScaledContents(True)  # 设置图片自适应标签大小
+        input_layout.addWidget(self.image_label)
 
-        #===========3、后五位================
-        number_layout = QVBoxLayout()
-        number_label = QLabel()
-        self.number_edit = QLineEdit()
-        self.number_edit.setPlaceholderText("字母+数字，共五位")
-        self.number_edit.setMaxLength(5)
-        number_layout.addWidget(self.number_edit)
-        number_layout.addWidget(number_label)
-        input_layout.addLayout(number_layout)
-
-        #============4、键盘输入区域===========
-        keyboard_layout = QGridLayout()
-        keyboard_layout.setSpacing(5)
-        keys = [
-            ['1', '2', 'A', 'B', 'C','D'],
-            ['3', '4', 'E', 'F', 'G', 'H'],
-            ['5', '6', 'I', 'J', 'K', 'L'],  
-            ['7', '8', 'M', 'N', 'O', 'P'],
-            ['9', '0', 'Q', 'R', 'S', 'T'],
-            ['清除', '←', 'U', 'V', 'W', 'X'],
-            ['', '', '', 'Y', 'Z', 'V']
-        ]
-        for row, key_row in enumerate(keys):
-            for col, key in enumerate(key_row):
-                print(row, col, key)
-                if key:
-                    btn = QPushButton(key)
-                    btn.setMinimumHeight(30)
-                    btn.setMaximumWidth(50)
-                    btn.clicked.connect(lambda clicked, k=key: self.key_press(k))
-                    keyboard_layout.addWidget(btn, row, col)
-        input_layout.addLayout(keyboard_layout)
-        
-        #=============4、确认按钮===============
-        self.verify_btn = QPushButton("确认车牌")
-        self.verify_btn.clicked.connect(self.verify_plate)
-        input_layout.addWidget(self.verify_btn)
+        #=============识别按钮============
+        self.recognize_btn = QPushButton("识别车牌")
+        self.recognize_btn.setMinimumWidth(40)
+        self.recognize_btn.setEnabled(False)  # 初始状态下禁用识别按钮
+        self.recognize_btn.clicked.connect(self.recognize_plate)
+        input_layout.addWidget(self.recognize_btn)
 
         #=============5、当前车牌===============
         self.result_label = QLabel("当前车牌: 未输入")
@@ -297,17 +366,70 @@ class ParkingApp(QMainWindow):
         central_wident.setLayout(main_layout)
         self.setCentralWidget(central_wident) # 设置主窗口的中央部件
 
-    # 车牌输入事件
-    def key_press(self, key):
-        current_text = self.number_edit.text()
-        if key == '清除':
-            self.number_edit.clear()
-        elif key == '←':
-            self.number_edit.setText(current_text[:-1])
-        else:
-            # 如果当前输入长度小于5，则允许添加新字符
-            if len(current_text) < 5:
-                self.number_edit.setText(current_text + key)
+        self.update_display()  # 初始化显示停车场状态和历史记录
+
+        self.init_detection()  # 初始化YOLO车牌检测器
+
+    def init_detection(self):
+        """初始化YOLO车牌检测器"""
+        try:
+            self.detector = YOLOv8LicenseDetector(model_name='best.pt')
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"加载YOLO模型失败: {e}")
+            sys.exit(1)
+
+    def select_image(self):
+        """选择车牌图片"""
+        file_path, _ = QFileDialog.getOpenFileName(self, "选择车牌图片", "", "Images (*.png *.jpg *.jpeg *.bmp)")
+        if file_path:
+            self.current_image_path = file_path
+            pixmap = QPixmap(file_path)
+            sealed_pixmap = pixmap.scaled(
+                self.image_label.width(), self.image_label.height(), 
+                Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            self.image_label.setPixmap(sealed_pixmap)
+            self.recognize_btn.setEnabled(True)  # 启用识别按钮
+            self.result_label.setText("当前车牌: 等待识别")
+            self.current_plate = ""
+            self.enter_btn.setEnabled(False)
+            self.exit_btn.setEnabled(False)
+
+    def recognize_plate(self):
+        """识别车牌"""
+        # hasattr是内置函数，用来检查对象是否携带某个属性，返回True或False
+        if not hasattr(self, 'current_image_path') or not self.current_image_path:
+            QMessageBox.warning(self, "警告", "请先选择车牌图片")
+            return
+        # 检测是否初始化了车牌检测器
+        if self.detector is None:
+            QMessageBox.warning(self, "警告", "车牌检测器未初始化")
+            return
+        # 使用YOLO检测车牌并识别
+        try:
+            QApplication.setOverrideCursor(Qt.WaitCursor)  # 设置等待光标
+            self.result_label.setText("正在识别车牌，请稍候...")
+            result = self.detector.detect_and_recognize(self.current_image_path)
+
+            if result:
+                best_plate = result[0]  # 取置信度最高的结果
+                self.current_plate = best_plate['plate_number']
+                confidence = best_plate['ocr_confidence']
+                self.result_label.setText(f"当前车牌: {self.current_plate}, 置信度: {confidence:.2%}")
+                self.enter_btn.setEnabled(True)
+                self.exit_btn.setEnabled(True)
+                QMessageBox.information(self, "识别成功", f"识别到车牌: {self.current_plate}\n置信度: {confidence:.2%}")
+            else:
+                self.current_plate = ""
+                self.result_label.setText("当前车牌: 未识别到车牌")
+                self.enter_btn.setEnabled(False)
+                self.exit_btn.setEnabled(False)
+                QMessageBox.warning(self, "识别失败", "未识别到车牌，请检查图片或尝试其他图片")
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"识别过程中发生错误: {e}")
+            self.result_label.setText("当前车牌: 识别失败")
+        finally:
+            QApplication.restoreOverrideCursor()  # 恢复默认光标
 
     # 车牌确认事件
     def verify_plate(self):

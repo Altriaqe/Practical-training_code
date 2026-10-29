@@ -1,20 +1,60 @@
 import sys
 import csv
+from pathlib import Path
 
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QFont
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+import joblib
 
-CSV_FILE = r"qt5\qt5窗口\student.csv"  # 从项目根目录运行时的CSV文件路径
+
+BASE_DIR = Path(__file__).resolve().parent
+CSV_FILE = BASE_DIR / "students-1.csv"
+MODEL_FILE = BASE_DIR.parents[1] / "cgpa_rf_model.pkl"
+
+class MlScorepredictor:
+    def __init__(self):
+        self.model = None
+        self.load_model()
+
+    def load_model(self):
+        try:
+            self.model = joblib.load(MODEL_FILE)  # 加载随机森林模型
+        except FileNotFoundError:
+            QMessageBox.critical(None, "错误", "模型文件 cgpa_rf_model.pkl 未找到，请先训练模型。")
+            sys.exit(1)
+
+    def predict(self, gre, toefl, university_rating, sop, lor, research):
+        """使用随机森林模型预测学生的录取分数"""
+        if self.model is None:
+            QMessageBox.critical(None, "错误", "模型未加载，请检查模型文件。")
+            return 0.0
+
+        # 将输入特征转换为二维数组，符合模型的输入要求
+        features = [[gre, toefl, university_rating, sop, lor, research]]
+        # predict 方法返回一个数组，取第一个元素作为预测结果,举例: 如果输入特征为 [330, 340, 4, 4.5, 4.5, 1]，则返回的预测结果可能为 [9.2]，取第一个元素 9.2 作为最终预测分数
+        return round(self.model.predict(features)[0], 2)  # 返回预测结果，保留两位小数
+    
 
 class Student:
     """学生类，存储学生信息"""
-    def __init__(self, id, name, gender, age, major):
+    def __init__(self, id, name, gender, age, major, gre, toefl, university_rating, sop, lor, research, cgpa):
         self.id = id
         self.name = name
         self.gender = gender
         self.age = age
         self.major = major
+
+        self.gre = gre
+        self.toefl = toefl
+        self.university_rating = university_rating
+        self.sop = sop
+        self.lor = lor
+        self.research = research
+        self.cgpa = cgpa
 
     def to_dict(self):
         """将学生信息转换为字典形式，便于存储和处理"""
@@ -23,12 +63,19 @@ class Student:
             "name": self.name,
             "gender": self.gender,
             "age": self.age,
-            "major": self.major
+            "major": self.major,
+            "gre": self.gre,
+            "toefl": self.toefl,
+            "university_rating": self.university_rating,
+            "sop": self.sop,
+            "lor": self.lor,
+            "research": self.research,
+            "cgpa": self.cgpa
         }
     
     def __str__(self):
         """返回学生信息的字符串表示形式，便于显示"""
-        return f"ID: {self.id}, Name: {self.name}, Gender: {self.gender}, Age: {self.age}, Major: {self.major}"
+        return f"ID: {self.id}, Name: {self.name}, Gender: {self.gender}, Age: {self.age}, Major: {self.major}, GRE: {self.gre}, TOEFL: {self.toefl}, University Rating: {self.university_rating}, SOP: {self.sop}, LOR: {self.lor}, CGPA: {self.cgpa}"
 
 class DataManager:
     """数据管理类，负责学生信息的读取和写入"""
@@ -47,12 +94,20 @@ class DataManager:
                         row['name'],
                         row['gender'],
                         row['age'],
-                        row['major']
+                        row['major'],
+                        row['gre'],
+                        row['toefl'],
+                        row['university_rating'],
+                        row['sop'],
+                        row['lor'],
+                        row['research'],
+                        row['cgpa']
                     )
                     students.append(student)
         except FileNotFoundError:
-            # 如果文件不存在，返回空列表
-            pass
+            QMessageBox.critical(None, "读取失败", f"找不到学生数据文件：\n{CSV_FILE}")
+        except KeyError as error:
+            QMessageBox.critical(None, "读取失败", f"CSV 文件缺少字段：{error}")
         return students
 
     @staticmethod
@@ -62,7 +117,10 @@ class DataManager:
             with open(CSV_FILE, mode='w', newline='', encoding='utf-8-sig') as file:
                 writer = csv.DictWriter(
                     file,
-                    fieldnames=['id', 'name', 'gender', 'age', 'major']
+                    fieldnames=[
+                        'id', 'name', 'gender', 'age', 'major', 'gre', 'toefl',
+                        'university_rating', 'sop', 'lor', 'research', 'cgpa'
+                    ]
                 )
                 writer.writeheader()
                 for student in students:
@@ -191,6 +249,55 @@ class StudentForm(QDialog):  # QDialog类用于创建对话框窗口，模态是
             self.major_input.setText(self.student.major)
         layout.addRow("专  业:", self.major_input)
 
+        # gre输入框
+        self.gre_input = QLineEdit()
+        self.gre_input.setPlaceholderText("请输入GRE成绩")
+        if self.student:  # 如果是编辑操作，预填充GRE成绩
+            self.gre_input.setText(str(self.student.gre))
+        layout.addRow("GRE:", self.gre_input)
+
+        # toefl输入框
+        self.toefl_input = QLineEdit()
+        self.toefl_input.setPlaceholderText("请输入TOEFL成绩")
+        if self.student:  # 如果是编辑操作，预填充TOEFL成绩
+            self.toefl_input.setText(str(self.student.toefl))
+        layout.addRow("TOEFL:", self.toefl_input)
+
+        # 大学评级输入框
+        self.university_rating_input = QLineEdit()
+        self.university_rating_input.setPlaceholderText("请输入大学评级")
+        if self.student:  # 如果是编辑操作，预填充大学评级
+            self.university_rating_input.setText(str(self.student.university_rating))
+        layout.addRow("大学评级:", self.university_rating_input)
+
+        # sop输入框
+        self.sop_input = QLineEdit()
+        self.sop_input.setPlaceholderText("请输入SOP评分")
+        if self.student:  # 如果是编辑操作，预填充SOP评分
+            self.sop_input.setText(str(self.student.sop))
+        layout.addRow("SOP:", self.sop_input)
+
+        # lor输入框
+        self.lor_input = QLineEdit()
+        self.lor_input.setPlaceholderText("请输入LOR评分")
+        if self.student:  # 如果是编辑操作，预填充LOR评分
+            self.lor_input.setText(str(self.student.lor))
+        layout.addRow("LOR:", self.lor_input)
+
+        # research输入框
+        self.research_input = QLineEdit()
+        self.research_input.setPlaceholderText("请输入Research评分")
+        if self.student:  # 如果是编辑操作，预填充Research评分
+            self.research_input.setText(str(self.student.research))
+        layout.addRow("Research:", self.research_input)
+
+        # cgpa输入框
+        self.cgpa_input = QLineEdit()
+        self.cgpa_input.setPlaceholderText("请输入CGPA")
+        if self.student:  # 如果是编辑操作，预填充CGPA
+            self.cgpa_input.setText(str(self.student.cgpa))
+        layout.addRow("CGPA:", self.cgpa_input)
+
         # 按钮
         button_layout = QHBoxLayout()
         self.ok_btn = QPushButton("确定")
@@ -215,47 +322,60 @@ class StudentForm(QDialog):  # QDialog类用于创建对话框窗口，模态是
         gender = self.gender_input.currentText()
         age = self.age_input.value()
         major = self.major_input.text().strip()
+        gre = self.gre_input.text().strip()
+        toefl = self.toefl_input.text().strip()
+        university_rating = self.university_rating_input.text().strip()
+        sop = self.sop_input.text().strip()
+        lor = self.lor_input.text().strip()
+        research = self.research_input.text().strip()
+        cgpa = self.cgpa_input.text().strip()
 
         if not id or not name or not major:
             QMessageBox.warning(self, "错误", "学生ID、姓名和专业不能为空")
             return None
 
-        return Student(id, name, gender, age, major)
+        return Student(id, name, gender, age, major, gre, toefl, university_rating, sop, lor, research, cgpa)
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("停车管理系统")
-        self.setGeometry(100,100,900,600)  # 设置窗口位置和大小
+        self.setGeometry(200,200,1950,600)  # 设置窗口位置和大小
 
         self.init_UI()
         self.load_students()
+        self.predictor = MlScorepredictor()  # 初始化模型预测器
 
     def init_UI(self):
         central_widget = QWidget()
         main_layput = QVBoxLayout(central_widget)
 
-        # 搜索栏
-        search_layout = QHBoxLayout()
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("请输入学生id")
-        self.search_btn = QPushButton("搜素")
-        self.reset_btn = QPushButton("重置")
+        # 底部按钮
+        button_layout = QHBoxLayout()
+        self.add_btn = QPushButton("添加")
+        self.edit_btn = QPushButton("编辑")
+        self.delete_btn = QPushButton("删除")
+        self.predict_btn = QPushButton("预测")
+        self.predict_all_btn = QPushButton("批量预测")
 
-        # 搜索按钮埋点
-        self.search_btn.clicked.connect(self.search_student)
-        self.reset_btn.clicked.connect(self.reset_search)
+        # 底部按钮埋点
+        self.add_btn.clicked.connect(self.add_student)
+        self.edit_btn.clicked.connect(self.edit_student)
+        self.delete_btn.clicked.connect(self.delete_student)
+        self.predict_btn.clicked.connect(self.predict_student)
+        self.predict_all_btn.clicked.connect(self.predict_all_students)
 
-
-        search_layout.addWidget(self.search_input)
-        search_layout.addWidget(self.search_btn)
-        search_layout.addWidget(self.reset_btn)
-        main_layput.addLayout(search_layout)
+        button_layout.addWidget(self.add_btn)
+        button_layout.addWidget(self.edit_btn)
+        button_layout.addWidget(self.delete_btn)
+        button_layout.addWidget(self.predict_btn)
+        button_layout.addWidget(self.predict_all_btn)
+        main_layput.addLayout(button_layout)
 
         # 表格
         self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["学生ID", "姓名", "性别", "年龄", "专业"])
+        self.table.setColumnCount(12)
+        self.table.setHorizontalHeaderLabels(["学生ID", "姓名", "性别", "年龄", "专业", "GRE", "TOEFL", "大学评级", "SOP", "LOR", "Research", "CGPA"])
         # 表格自适应
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)  # 禁止编辑
@@ -263,21 +383,8 @@ class MainWindow(QMainWindow):
 
         main_layput.addWidget(self.table)
 
-        # 底部按钮
-        button_layout = QHBoxLayout()
-        self.add_btn = QPushButton("添加")
-        self.edit_btn = QPushButton("编辑")
-        self.delete_btn = QPushButton("删除")
 
-        # 底部按钮埋点
-        self.add_btn.clicked.connect(self.add_student)
-        self.edit_btn.clicked.connect(self.edit_student)
-        self.delete_btn.clicked.connect(self.delete_student)
 
-        button_layout.addWidget(self.add_btn)
-        button_layout.addWidget(self.edit_btn)
-        button_layout.addWidget(self.delete_btn)
-        main_layput.addLayout(button_layout)
 
         self.setCentralWidget(central_widget)
 
@@ -300,6 +407,13 @@ class MainWindow(QMainWindow):
             self.table.setItem(row, 2, QTableWidgetItem(str(student.gender)))
             self.table.setItem(row, 3, QTableWidgetItem(str(student.age)))
             self.table.setItem(row, 4, QTableWidgetItem(str(student.major)))
+            self.table.setItem(row, 5, QTableWidgetItem(str(student.gre)))
+            self.table.setItem(row, 6, QTableWidgetItem(str(student.toefl)))
+            self.table.setItem(row, 7, QTableWidgetItem(str(student.university_rating)))
+            self.table.setItem(row, 8, QTableWidgetItem(str(student.sop)))
+            self.table.setItem(row, 9, QTableWidgetItem(str(student.lor)))
+            self.table.setItem(row, 10, QTableWidgetItem(str(student.research)))
+            self.table.setItem(row, 11, QTableWidgetItem(str(student.cgpa)))
 
         # 清楚选中状态
         # 标记表格中的所有行未被选中
@@ -366,6 +480,48 @@ class MainWindow(QMainWindow):
         self.search_input.clear()
         self.load_students()  # 重新加载所有学生数据
 
+    def predict_student(self):
+        """预测学生CGPA"""
+        row = self.table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "错误", "请先选择要预测的学生信息")
+            return
+        self.students = DataManager.read_students()
+        s = self.students[row]
+        try:
+            gre = float(s.gre)
+            toefl = float(s.toefl)
+            university_rating = float(s.university_rating)
+            sop = float(s.sop)
+            lor = float(s.lor)
+            research = float(s.research)
+            cgpa = self.predictor.predict(gre, toefl, university_rating, sop, lor, research)
+            s.cgpa = cgpa  # 更新学生的CGPA
+            DataManager.write_students(self.students)  # 更新学生信息到CSV文件
+            self.load_students()  # 重新加载学生数据
+            QMessageBox.information(self, "预测结果", f"学生 {s.name} (ID: {s.id}) 的预测CGPA为: {cgpa}")
+        except ValueError:
+            QMessageBox.warning(self, "错误", "学生信息中存在非数字的GRE、TOEFL、大学评级、SOP、LOR或Research值，无法进行预测")
+
+    def predict_all_students(self):
+        """批量预测所有学生的CGPA"""
+        self.students = DataManager.read_students()
+        for s in self.students:
+            try:
+                gre = float(s.gre)
+                toefl = float(s.toefl)
+                university_rating = float(s.university_rating)
+                sop = float(s.sop)
+                lor = float(s.lor)
+                research = float(s.research)
+                cgpa = self.predictor.predict(gre, toefl, university_rating, sop, lor, research)
+                s.cgpa = cgpa  # 更新学生的CGPA
+            except:
+                continue  # 如果某个学生信息有误，跳过该学生，继续预测其他学生
+        DataManager.write_students(self.students)  # 更新学生信息到CSV文件
+        self.load_students()  # 重新加载学生数据
+        QMessageBox.information(self, "预测结果", "所有学生的CGPA预测已完成")
+        
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()

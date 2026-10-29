@@ -1,4 +1,4 @@
-﻿id,name,gender,age,major
+﻿id,name,gender,age,major,gre,toefl,university_rating,sop,lor,cgpa
 001,张伟,男,20,计算机科学
 002,李娜,女,21,电子工程
 004,刘洋,男,20,土木工程

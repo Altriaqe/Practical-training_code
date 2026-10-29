@@ -182,7 +182,6 @@ class Window(QWidget):
         # 创建棋盘区域
         self.board_widget = GoBangBoard()
         self.board_widget.setMinimumSize(800, 800)
-        self.board_widget.turn_changed.connect(self.update_status)
         main_layout.addWidget(self.board_widget)
 
         # 按钮布局
